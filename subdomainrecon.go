@@ -280,8 +280,8 @@ func initFlags() string {
 
 	flag.Usage = func() {
 		fmt.Fprintln(os.Stderr, "---------------------------------------------------------")
-		fmt.Fprintln(os.Stderr, "Usage:   $ subdigger -d <domain-name> [-o <filename.extension>] [-l 1]")
-		fmt.Fprintln(os.Stderr, "Example: $ subdigger -d example.org -o subdomains.json")
+		fmt.Fprintln(os.Stderr, "Usage:   $ subdomainrecon -d <domain-name> [-o <filename.extension>] [-l 1]")
+		fmt.Fprintln(os.Stderr, "Example: $ subdomainrecon -d example.org -o subdomains.json")
 		fmt.Fprintln(os.Stderr, "---------------------------------------------------------\nFlags:")
 		flag.PrintDefaults()
 	}

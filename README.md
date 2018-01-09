@@ -1,7 +1,7 @@
-# subdigger
-subdigger is a subdomain enumeration tool which uses various data sources to derive a exhaustive list of subdomains of a given domain.
+# subdomainrecon
+subdomainrecon is a subdomain enumeration tool which uses various data sources to derive a exhaustive list of subdomains for a given domain.
 
-![subdigger-screenshot](https://user-images.githubusercontent.com/14211134/29538951-d205cf08-867c-11e7-9737-5d296c8a515a.png)
+![subdigger-screenshot](https://user-images.githubusercontent.com/14211134/29600652-0ba01196-878c-11e7-8e19-2bab91c596f3.png)
 
 ## Sources
 subdigger queries following sources to derive a list of subdomains:

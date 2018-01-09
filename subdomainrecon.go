@@ -22,6 +22,13 @@ const Version = "1.0.0"
 
 const (
 	UserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.96 Safari/537.36"
+	Banner    = `
+ __       _          ___                      _           __                      
+/ _\_   _| |__      /   \___  _ __ ___   __ _(_)_ __     /__\ ___  ___ ___  _ __  
+\ \| | | | '_ \    / /\ / _ \| '_ ' _ \ / _' | | '_ \   / \/// _ \/ __/ _ \| '_ \ 
+_\ \ |_| | |_) |  / /_// (_) | | | | | | (_| | | | | | / _  \  __/ (_| (_) | | | |
+\__/\__,_|_.__/  /___,' \___/|_| |_| |_|\__,_|_|_| |_| \/ \_/\___|\___\___/|_| |_|
+`
 )
 
 type searchEngineAttributes struct {
@@ -38,9 +45,9 @@ var (
 	Error   *log.Logger
 
 	//argument flags
-	domainPtr     *string
-	outputFilePtr *string
-	logPtr        *int
+	domainPtr       *string
+	outputFormatPtr *string
+	logPtr          *int
 
 	// application variables
 	searchEngines = map[string]searchEngineAttributes{
@@ -73,7 +80,12 @@ var Subdomains map[string]properties
 func main() {
 	domain := initFlags()
 
+	fmt.Println(Banner)
+
 	initLogger()
+
+	// writeFile(domain)
+	// os.Exit(0)
 
 	logIt("Searching subdomains for domain: "+domain+" ... ", 1, true)
 
@@ -85,13 +97,87 @@ func main() {
 	// Method 2: Fetch from search engine (google, yahoo, bing) results
 	subDomainsFromSearchEngines(domain)
 
-	displaySubdomains()
+	// Populate IP addresses
+
+	writeTxtFile("") // "" indicates to just display the sub-domains on console
+
+	writeFile(domain)
+}
+
+func writeFile(domain string) {
+	count := 0
+
+	if *outputFormatPtr == "" {
+		//txt = true
+		fmt.Printf("No output file specified, ouputing to %s.txt\n", *domainPtr)
+		fmt.Printf("Use flag '-f' to output in json, html, csv format.\n")
+		writeTxtFile(domain)
+		count += 1
+	} else {
+		// Extract requested output format(s)
+		formats := strings.Split(*outputFormatPtr, ",")
+		fmt.Printf("Outputing to %s\n", formats)
+		for _, format := range formats {
+			switch format {
+			case "txt":
+				writeTxtFile(domain)
+				count += 1
+			case "json":
+				writeJsonFile(domain)
+				count += 1
+			case "csv":
+				writeCsvFile(domain)
+				count += 1
+			case "html":
+				writeHtmlFile(domain)
+				count += 1
+			} // end switch
+		} // end for range
+	} // end if-else
+
+	if count == 0 {
+		fmt.Println("No known format (-f) specified, saving in txt format...")
+		writeTxtFile(domain)
+	}
+}
+
+func writeTxtFile(domain string) {
+	sno := 0
+	str := ""
+
+	str += fmt.Sprintf("%-6s%-50s%-40s\n", "S.No.", "Subdomain", "Source")
+	str += fmt.Sprintln("===================================================================")
+	for subdomain, attributes := range Subdomains {
+		sno += 1
+		str += fmt.Sprintf("%4d  %-50s%v\n", sno, subdomain, strings.Join(attributes.source, ", "))
+	}
+
+	// null string indicates display the text on screen
+	if domain == "" {
+		logIt(Subdomains, 1)
+		fmt.Println(str)
+	} else { // write to file <domain>.txt
+		err := ioutil.WriteFile(domain+"-subdomains.txt", []byte(str), 0644)
+		if err != nil {
+			panic(err)
+		}
+	}
+}
+
+func writeJsonFile(domain string) {
+
+}
+
+func writeHtmlFile(domain string) {
+
+}
+
+func writeCsvFile(domain string) {
+
 }
 
 func subDomainsFromVirusTotal(domain string) {
 	url := "https://virustotal.com/en/domain/" + domain + "/information/"
-
-	logIt("Fetching from Virus Total...", 1, true)
 
 	xpath := "//*[@id='observed-subdomains']/div"
 	regex := ""
@@ -243,18 +329,6 @@ func getMostCommon(subdomains map[string]int) []string {
 	return mostCommon
 }
 
-/*
-  Display the subdomains in a legible manner
-*/
-func displaySubdomains() {
-	logIt(Subdomains, 1)
-	fmt.Printf("%-50s%-40s\n", "Subdomain", "Source")
-	fmt.Println("=============================================================")
-	for subdomain, attributes := range Subdomains {
-		fmt.Printf("%-50s%v\n", subdomain, strings.Join(attributes.source, ", "))
-	}
-}
-
 /* Add the new subdomains found to the global subdomains map
    params:
     newSubdomains - new subdomains found via some source
@@ -272,7 +346,7 @@ func merge(newSubdomains map[string]int, source string) {
 			Subdomains[sd] = properties{source: []string{source}}
 		}
 	}
-	logIt("Total subdomains discovered via "+source+": "+strconv.Itoa(len(newSubdomains))+". New: "+strconv.Itoa(newCount), 1, true)
+	logIt("Subdomains discovered via "+source+": "+strconv.Itoa(len(newSubdomains))+".", 1, true)
 }
 
 /* Parse command line flage and initiaize the global flag variables */
@@ -280,8 +354,8 @@ func initFlags() string {
 
 	flag.Usage = func() {
 		fmt.Fprintln(os.Stderr, "---------------------------------------------------------")
-		fmt.Fprintln(os.Stderr, "Usage:   $ subdomainrecon -d <domain-name> [-o <filename.extension>] [-l 1]")
-		fmt.Fprintln(os.Stderr, "Example: $ subdomainrecon -d example.org -o subdomains.json")
+		fmt.Fprintln(os.Stderr, "Usage:   $ subdomainrecon -d <domain-name> [-f <format(s)>] [-l 1]")
+		fmt.Fprintln(os.Stderr, "Example: $ subdomainrecon -d example.org")
 		fmt.Fprintln(os.Stderr, "---------------------------------------------------------\nFlags:")
 		flag.PrintDefaults()
 	}
@@ -289,13 +363,13 @@ func initFlags() string {
 	domainPtr = flag.String("d", "",
 		`TLD Domain Name. eg. 'example.org'. Do NOT enter subdomains like 'ftp.example.org'`)
 
-	outputFilePtr = flag.String("o", "",
-		`Name of output file. eg. 'subdomains.json' The format can be on of json|html|txt|csv.
-     Enter -o subdomains.json,html,csv to generate 3 output files in those 3 formats`)
+	outputFormatPtr = flag.String("f", "txt",
+		`Format of output file, can be one of json|html|txt|csv.
+        Eg. '-f json,html,csv' will generate output files in 3 formats`)
 
 	logPtr = flag.Int("l", 0,
-		`Debug mode. This will create a verbose log file (run.log) with all request/responses.
-                 -l 1 [least verbose]. -l 3 [max verbose]`)
+		`Debug mode. This will create a debug log file (run.log) with all request/responses.
+        -l 1 [least verbose]. -l 3 [max verbose]`)
 
 	flag.Parse()
 
@@ -311,13 +385,6 @@ func initFlags() string {
 
 	if *logPtr > 0 {
 		fmt.Println("Logging to file run.log")
-	}
-
-	if *outputFilePtr == "" {
-		fmt.Printf("No output file specified, ouputing to %s.txt\n", *domainPtr)
-	} else {
-		// CHECK:: Need to extract the format and set default format etc. here
-		fmt.Printf("Outputing to %s.txt\n", *outputFilePtr)
 	}
 
 	return domain
@@ -345,7 +412,7 @@ func logIt(val interface{}, level int, console ...bool) {
 	}
 
 	// log only if the log level specified at the command line (logPtr)
-	// is greater than the log significance (leve) of this log entry
+	// is greater than the log significance (level) of this log entry
 	if *logPtr >= level {
 		v := reflect.ValueOf(val)
 		switch v.Kind() {

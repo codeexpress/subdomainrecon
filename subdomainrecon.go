@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"reflect"
@@ -70,12 +71,12 @@ var (
 )
 
 // properties of a subdomain
-type properties struct {
-	ip     string
-	source []string
+type subdomain struct {
+	ip     []string // can resolve to multiple IPs
+	source []string // can be reported by multiple sources (Eg. Virus Total, bing)
 }
 
-var Subdomains map[string]properties
+var Subdomains map[string]subdomain
 
 func main() {
 	domain := initFlags()
@@ -89,8 +90,9 @@ func main() {
 
 	logIt("Searching subdomains for domain: "+domain+" ... ", 1, true)
 
-	Subdomains = make(map[string]properties) // init global map
+	Subdomains = make(map[string]subdomain) // init global map
 
+	logIt("Subdomains discovered via: ", 1, true)
 	// Method 1: Fetch from virustotal
 	subDomainsFromVirusTotal(domain)
 
@@ -98,42 +100,53 @@ func main() {
 	subDomainsFromSearchEngines(domain)
 
 	// Populate IP addresses
+	populateIpAddresses()
 
 	writeTxtFile("") // "" indicates to just display the sub-domains on console
 
 	writeFile(domain)
 }
 
+// Iterates through all subdomains and fills in their IP address
+func populateIpAddresses() {
+	for sd, attributes := range Subdomains {
+		ip, _ := net.LookupHost(sd)
+
+		var ipv4Arr []string
+		// Contains both IPv4 and IPv6. Just log v4 for brevity.
+		for _, addr := range ip {
+			if len(addr) < 15 {
+				ipv4Arr = append(ipv4Arr, addr)
+			}
+		}
+
+		attributes.ip = ipv4Arr
+		Subdomains[sd] = attributes
+	}
+}
+
 func writeFile(domain string) {
 	count := 0
 
-	if *outputFormatPtr == "" {
-		//txt = true
-		fmt.Printf("No output file specified, ouputing to %s.txt\n", *domainPtr)
-		fmt.Printf("Use flag '-f' to output in json, html, csv format.\n")
-		writeTxtFile(domain)
-		count += 1
-	} else {
-		// Extract requested output format(s)
-		formats := strings.Split(*outputFormatPtr, ",")
-		fmt.Printf("Outputing to %s\n", formats)
-		for _, format := range formats {
-			switch format {
-			case "txt":
-				writeTxtFile(domain)
-				count += 1
-			case "json":
-				writeJsonFile(domain)
-				count += 1
-			case "csv":
-				writeCsvFile(domain)
-				count += 1
-			case "html":
-				writeHtmlFile(domain)
-				count += 1
-			} // end switch
-		} // end for range
-	} // end if-else
+	// Extract requested output format(s)
+	formats := strings.Split(*outputFormatPtr, ",")
+	fmt.Printf("Outputing to %s\n", formats)
+	for _, format := range formats {
+		switch format {
+		case "txt":
+			writeTxtFile(domain)
+			count += 1
+		case "json":
+			writeJsonFile(domain)
+			count += 1
+		case "csv":
+			writeCsvFile(domain)
+			count += 1
+		case "html":
+			writeHtmlFile(domain)
+			count += 1
+		} // end switch
+	} // end for range
 
 	if count == 0 {
 		fmt.Println("No known format (-f) specified, saving in txt format...")
@@ -145,11 +158,18 @@ func writeTxtFile(domain string) {
 	sno := 0
 	str := ""
 
-	str += fmt.Sprintf("%-6s%-50s%-40s\n", "S.No.", "Subdomain", "Source")
-	str += fmt.Sprintln("===================================================================")
-	for subdomain, attributes := range Subdomains {
+	str += fmt.Sprintf("\n%-6s%-35s%-30s%-20s\n", "S.No.", "Subdomain", "Source", "IP")
+	str += fmt.Sprintln("=================================================================================")
+	for sd, attributes := range Subdomains {
 		sno += 1
-		str += fmt.Sprintf("%4d  %-50s%v\n", sno, subdomain, strings.Join(attributes.source, ", "))
+		numIpAddrs := len(attributes.ip)
+		ipAddrs := ""
+		if numIpAddrs > 2 && domain == "" { // just display 2 IP on terminal to save real estate
+			ipAddrs = attributes.ip[0] + ", " + attributes.ip[1] + " and " + strconv.Itoa(numIpAddrs-2) + " more"
+		} else { // when writing to file or when <=2 ip addresses found, write all of them
+			ipAddrs = strings.Join(attributes.ip, ", ")
+		}
+		str += fmt.Sprintf("%4d  %-35s%-30s%-20s\n", sno, sd, strings.Join(attributes.source, ", "), ipAddrs)
 	}
 
 	// null string indicates display the text on screen
@@ -343,10 +363,12 @@ func merge(newSubdomains map[string]int, source string) {
 			Subdomains[sd] = sdProperties
 		} else {
 			newCount += 1
-			Subdomains[sd] = properties{source: []string{source}}
+			Subdomains[sd] = subdomain{source: []string{source}}
 		}
 	}
-	logIt("Subdomains discovered via "+source+": "+strconv.Itoa(len(newSubdomains))+".", 1, true)
+
+	str := fmt.Sprintf("\t• %-15s%4d", source, len(newSubdomains)) //Eg. • Google        20
+	logIt(str, 1, true)
 }
 
 /* Parse command line flage and initiaize the global flag variables */
